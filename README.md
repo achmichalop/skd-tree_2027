@@ -23,7 +23,7 @@ This project requires the following dependencies to build and run the experiment
 ### General Dependencies (for all indices)
 - **Boost 1.79.0** - [Boost 1.79.0](https://www.boost.org/users/history/version_1_79_0.html)
 
-### Dependencies for mkd-tree
+### Dependencies for skd-tree
 - **g++ / gcc** – version 13 or higher
 -  **AVX-512** – CPU must support AVX-512 instructions
 - **Armadillo** – [Armadillo](https://arma.sourceforge.net/)
