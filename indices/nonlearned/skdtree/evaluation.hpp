@@ -745,13 +745,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
         heapEntry = heap.top();
         heap.pop();
 
-        if (candidateResults.currCapacity == k && heapEntry.dist >= bound)
+        if (candidateResults.size() == k && heapEntry.dist >= bound)
         {
-            for (auto& entry: candidateResults)
-            {
-                results.emplace_back(entry.p);
-            }
-
             break;
         }
 
@@ -767,9 +762,7 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                 {
                     case NodeType::N16:
                     {
-
                         Node16* actualNode = reinterpret_cast<Node16 *>(heapEntry.node);
-
                         uint32_t pos = successorLinGNode16(actualNode->separators, convertedCoordinates[dim]);
 
                         heap.push(heaps::minHeapNode<Dim>(actualNode->childsPtrs[pos], pos, heaps::SINGLE_NODE, heapEntry.dist, heapEntry.projection_dists));
@@ -778,8 +771,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_16_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -790,8 +783,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_16_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -805,15 +798,15 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         Node32* actualNode = reinterpret_cast<Node32 *>(heapEntry.node);
 
                         uint32_t pos = successorLinGNode32(actualNode->separators, convertedCoordinates[dim]);
-
+                        
                         heap.push(heaps::minHeapNode<Dim>(actualNode->childsPtrs[pos], pos, heaps::SINGLE_NODE, heapEntry.dist, heapEntry.projection_dists));
 
                         if (pos > 0)
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_32_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -824,8 +817,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_32_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -839,15 +832,15 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         Node64* actualNode = reinterpret_cast<Node64 *>(heapEntry.node);
 
                         uint32_t pos = successorLinGNode64(actualNode->separators, convertedCoordinates[dim]);
-
+                        
                         heap.push(heaps::minHeapNode<Dim>(actualNode->childsPtrs[pos], pos, heaps::SINGLE_NODE, heapEntry.dist, heapEntry.projection_dists));
 
                         if (pos > 0)
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -858,8 +851,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -869,10 +862,30 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                     }
                     case NodeType::Leaf:
                     {
+
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
+                        
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
+
 
                         uint32_t numOfRecords = actualNode->slotuse;
-                        
+
                         std::vector<double> dists(numOfRecords, 0.0f);
 
                         __m512d q_vec[Dim];
@@ -881,9 +894,9 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                             q_vec[j] = _mm512_set1_pd(query[j]);
                         }
 
-
+                
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -893,7 +906,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
-                            _mm512_storeu_pd(dists.data() + i, dist_vec);
+
+                            _mm512_storeu_pd(dists.data() + i, dist_vec); 
                         }
 
                         for (; i < numOfRecords; i++)
@@ -909,18 +923,12 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
 
                         break;
@@ -945,8 +953,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx - 1;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos] << NODE_16_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -965,8 +973,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx - 1;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos] << NODE_32_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -986,8 +994,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx - 1;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1008,19 +1016,16 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                 {
                     case NodeType::N16:
                     {
-
                         Node16* actualNode = reinterpret_cast<Node16 *>(heapEntry.node);
-
-                        uint32_t pos = successorLinGNode16(actualNode->separators, convertedCoordinates[dim]);
-
+                        uint32_t pos = successorLinGNode16(actualNode->separators, convertedCoordinates[dim]);                        
                         heap.push(heaps::minHeapNode<Dim>(actualNode->childsPtrs[pos], pos, heaps::SINGLE_NODE, heapEntry.dist, heapEntry.projection_dists));
 
                         if (pos > 0)
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_16_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1031,8 +1036,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_16_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
                             
                             if (dist < bound)
@@ -1053,8 +1058,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_32_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1065,8 +1070,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_32_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1087,8 +1092,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1099,8 +1104,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1111,9 +1116,28 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                     case NodeType::Leaf:
                     {
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
+                        
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
+
 
                         uint32_t numOfRecords = actualNode->slotuse;
-                        
+
                         std::vector<double> dists(numOfRecords, 0.0f);
 
                         __m512d q_vec[Dim];
@@ -1124,7 +1148,7 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
 
 
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -1134,6 +1158,7 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
+
                             _mm512_storeu_pd(dists.data() + i, dist_vec);
                         }
 
@@ -1150,20 +1175,14 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
-                    
+                        
                         break;
                     }
                 }
@@ -1186,8 +1205,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx + 1;
                             double diff = (((uint64_t) actualNode->separators[pos-1] << NODE_16_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1206,8 +1225,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx + 1;
                             double diff = (((uint64_t) actualNode->separators[pos-1] << NODE_32_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1227,8 +1246,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx + 1;
                             double diff = (actualNode->separators[pos-1] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1249,7 +1268,6 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                 {
                     case NodeType::N16:
                     {
-
                         Node16* actualNode = reinterpret_cast<Node16 *>(heapEntry.node);
 
                         uint32_t pos = successorLinGNode16(actualNode->separators, convertedCoordinates[dim]);
@@ -1260,8 +1278,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_16_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1272,8 +1290,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_16_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
                             
                             if (dist < bound)
@@ -1294,8 +1312,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_32_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1306,8 +1324,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_32_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1328,8 +1346,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1340,8 +1358,8 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1353,8 +1371,25 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                     {
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
 
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
+
                         uint32_t numOfRecords = actualNode->slotuse;
-                    
                         std::vector<double> dists(numOfRecords, 0.0f);
 
                         __m512d q_vec[Dim];
@@ -1365,7 +1400,7 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
 
 
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -1375,7 +1410,9 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
+
                             _mm512_storeu_pd(dists.data() + i, dist_vec);
+                            
                         }
 
                         for (; i < numOfRecords; i++)
@@ -1391,18 +1428,13 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
+
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
 
                         break;
@@ -1414,7 +1446,17 @@ inline types::Points<Dim> knnQuery_3way_nodes(types::Point<Dim> query, uint32_t 
         }
 
     }
-    
+
+    for (auto& entry: candidateResults.data)
+    {
+        types::Point<Dim> p;
+
+        for (uint32_t d = 0; d < Dim; d++)
+            p[d] = entry.leaf->records[d][entry.idx];
+        
+        results.emplace_back(p);
+    }
+
     return results;
 }
 
@@ -1442,13 +1484,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
         heapEntry = heap.top();
         heap.pop();
 
-        if (candidateResults.currCapacity == k && heapEntry.dist >= bound)
+        if (candidateResults.size() == k && heapEntry.dist >= bound)
         {
-            for (auto& entry: candidateResults)
-            {
-                results.emplace_back(entry.p);
-            }
-
             break;
         }
 
@@ -1467,15 +1504,15 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         Node32* actualNode = reinterpret_cast<Node32 *>(heapEntry.node);
 
                         uint32_t pos = successorLinGNode32(actualNode->separators, convertedCoordinates[dim]);
-
+                        
                         heap.push(heaps::minHeapNode<Dim>(actualNode->childsPtrs[pos], pos, heaps::SINGLE_NODE, heapEntry.dist, heapEntry.projection_dists));
 
                         if (pos > 0)
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_32_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1486,8 +1523,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_32_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1501,15 +1538,15 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         Node64* actualNode = reinterpret_cast<Node64 *>(heapEntry.node);
 
                         uint32_t pos = successorLinGNode64(actualNode->separators, convertedCoordinates[dim]);
-
+                        
                         heap.push(heaps::minHeapNode<Dim>(actualNode->childsPtrs[pos], pos, heaps::SINGLE_NODE, heapEntry.dist, heapEntry.projection_dists));
 
                         if (pos > 0)
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1520,8 +1557,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1531,9 +1568,30 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                     }
                     case NodeType::Leaf:
                     {
+
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
+                        
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
+
 
                         uint32_t numOfRecords = actualNode->slotuse;
+
                         std::vector<double> dists(numOfRecords, 0.0f);
 
                         __m512d q_vec[Dim];
@@ -1542,9 +1600,9 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                             q_vec[j] = _mm512_set1_pd(query[j]);
                         }
 
-
+                
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -1554,7 +1612,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
-                            _mm512_storeu_pd(dists.data() + i, dist_vec);
+
+                            _mm512_storeu_pd(dists.data() + i, dist_vec); 
                         }
 
                         for (; i < numOfRecords; i++)
@@ -1570,20 +1629,14 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
-                        
+
                         break;
                     }
                 }
@@ -1606,8 +1659,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx - 1;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos] << NODE_32_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1627,8 +1680,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx - 1;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1659,8 +1712,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_32_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1671,8 +1724,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_32_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1693,8 +1746,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1705,8 +1758,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1717,9 +1770,28 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                     case NodeType::Leaf:
                     {
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
+                        
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
+
 
                         uint32_t numOfRecords = actualNode->slotuse;
-                     
+
                         std::vector<double> dists(numOfRecords, 0.0f);
 
                         __m512d q_vec[Dim];
@@ -1730,7 +1802,7 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
 
 
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -1740,6 +1812,7 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
+
                             _mm512_storeu_pd(dists.data() + i, dist_vec);
                         }
 
@@ -1756,20 +1829,14 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
-
+                        
                         break;
                     }
                 }
@@ -1792,8 +1859,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx + 1;
                             double diff = (((uint64_t) actualNode->separators[pos-1] << NODE_32_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1813,8 +1880,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             uint32_t pos = heapEntry.idx + 1;
                             double diff = (actualNode->separators[pos-1] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1845,8 +1912,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - ((uint64_t) actualNode->separators[pos-1] << NODE_32_TRAILING_ZEROS)) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1857,8 +1924,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (((uint64_t) actualNode->separators[pos] << NODE_32_TRAILING_ZEROS) - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1879,8 +1946,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1891,8 +1958,8 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -1904,8 +1971,25 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                     {
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
 
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
+
                         uint32_t numOfRecords = actualNode->slotuse;
-                        
                         std::vector<double> dists(numOfRecords, 0.0f);
 
                         __m512d q_vec[Dim];
@@ -1916,7 +2000,7 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
 
 
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -1926,7 +2010,9 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
+
                             _mm512_storeu_pd(dists.data() + i, dist_vec);
+                            
                         }
 
                         for (; i < numOfRecords; i++)
@@ -1942,20 +2028,15 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
+
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
-                        
+
                         break;
                     }
                 }
@@ -1965,7 +2046,17 @@ inline types::Points<Dim> knnQuery_2way_nodes(types::Point<Dim> query, uint32_t 
         }
 
     }
-    
+
+    for (auto& entry: candidateResults.data)
+    {
+        types::Point<Dim> p;
+
+        for (uint32_t d = 0; d < Dim; d++)
+            p[d] = entry.leaf->records[d][entry.idx];
+        
+        results.emplace_back(p);
+    }
+
     return results;
 }
 
@@ -1993,13 +2084,9 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
         heapEntry = heap.top();
         heap.pop();
 
-        if (candidateResults.currCapacity == k && heapEntry.dist >= bound)
-        {
-            for (auto& entry: candidateResults)
-            {
-                results.emplace_back(entry.p);
-            }
 
+        if (candidateResults.size() == k && heapEntry.dist >= bound)
+        {
             break;
         }
 
@@ -2025,8 +2112,8 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -2037,8 +2124,8 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -2049,9 +2136,25 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                     case NodeType::Leaf:
                     {
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
 
                         uint32_t numOfRecords = actualNode->slotuse;
-
                         std::vector<double> dists(numOfRecords, 0.0f);
 
                         __m512d q_vec[Dim];
@@ -2062,7 +2165,7 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
 
 
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -2072,7 +2175,9 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
+
                             _mm512_storeu_pd(dists.data() + i, dist_vec);
+                            
                         }
 
                         for (; i < numOfRecords; i++)
@@ -2088,20 +2193,15 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
+
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
-
+                        
                         break;
                     }
                 }
@@ -2120,8 +2220,8 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                     std::array<double, Dim> projections = heapEntry.projection_dists;
                     uint32_t pos = heapEntry.idx - 1;
                     double diff = (convertedCoordinates[dim] - actualNode->separators[pos]) / (double) CONVERSION_FACTOR;
-                    double projection = diff * diff - projections[dim];
-                    double dist = heapEntry.dist + projection;
+                    double projection = diff * diff;
+                    double dist = heapEntry.dist + projection - projections[dim];
                     projections[dim] = projection;
 
                     if (dist < bound)
@@ -2131,7 +2231,7 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                 heapEntry.node = actualNode->childsPtrs[heapEntry.idx];
                 heapEntry.type = heaps::SINGLE_NODE;
                 
-                metadata = *reinterpret_cast<uint16_t *>(heapEntry.node);
+                metadata = *reinterpret_cast<uint32_t *>(heapEntry.node);
                 type = metadata & 0x3;
                 dim = (metadata >> 2) & 0x3F;
 
@@ -2142,15 +2242,14 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                         Node64* actualNode = reinterpret_cast<Node64 *>(heapEntry.node);
 
                         uint32_t pos = successorLinGNode64(actualNode->separators, convertedCoordinates[dim]);
-
                         heap.push(heaps::minHeapNode<Dim>(actualNode->childsPtrs[pos], pos, heaps::SINGLE_NODE, heapEntry.dist, heapEntry.projection_dists));
 
                         if (pos > 0)
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -2161,8 +2260,8 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -2173,6 +2272,23 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                     case NodeType::Leaf:
                     {
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
 
                         uint32_t numOfRecords = actualNode->slotuse;
 
@@ -2186,7 +2302,7 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
 
 
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -2196,7 +2312,9 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
+
                             _mm512_storeu_pd(dists.data() + i, dist_vec);
+                            
                         }
 
                         for (; i < numOfRecords; i++)
@@ -2212,19 +2330,15 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
+
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
+
                         break;
                     }
                 }
@@ -2244,8 +2358,8 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                     std::array<double, Dim> projections = heapEntry.projection_dists;
                     uint32_t pos = heapEntry.idx + 1;
                     double diff = (actualNode->separators[pos-1] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                    double projection = diff * diff - projections[dim];
-                    double dist = heapEntry.dist + projection;
+                    double projection = diff * diff;
+                    double dist = heapEntry.dist + projection - projections[dim];
                     projections[dim] = projection;
 
                     if (dist < bound)
@@ -2273,8 +2387,8 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (convertedCoordinates[dim] - actualNode->separators[pos-1]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -2285,8 +2399,8 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                         {
                             std::array<double, Dim> projections = heapEntry.projection_dists;
                             double diff = (actualNode->separators[pos] - convertedCoordinates[dim]) / (double) CONVERSION_FACTOR;
-                            double projection = diff * diff - projections[dim];
-                            double dist = heapEntry.dist + projection;
+                            double projection = diff * diff;
+                            double dist = heapEntry.dist + projection - projections[dim];
                             projections[dim] = projection;
 
                             if (dist < bound)
@@ -2297,6 +2411,23 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                     case NodeType::Leaf:
                     {
                         LeafNode<Dim> *actualNode = reinterpret_cast<LeafNode<Dim>*>(heapEntry.node);
+                        // types::Point<Dim> leafMinCoords = actualNode->boundingBox.min_corner(), leafMaxCoords = actualNode->boundingBox.max_corner();
+                        // double dist_P2B = 0.0;
+
+                        // for (uint32_t j = 0; j < Dim; j++)
+                        // {
+                        //     double diff = 0.0;
+
+                        //     if (query[j] < leafMinCoords[j])
+                        //         diff = leafMinCoords[j] - query[j];
+                        //     else if (query[j] > leafMaxCoords[j])
+                        //         diff = query[j] - leafMaxCoords[j]; 
+
+                        //     dist_P2B += diff * diff;
+                        // }
+
+                        // if (dist_P2B >= bound)
+                        //     break;
 
                         uint32_t numOfRecords = actualNode->slotuse;
 
@@ -2310,7 +2441,7 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
 
 
                         uint32_t i = 0;
-                        for (; i + 8 < numOfRecords; i += 8)
+                        for (; i + 8 <= numOfRecords; i += 8)
                         {
                             __m512d dist_vec = _mm512_setzero_pd();
 
@@ -2320,7 +2451,9 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
                                 __m512d diff_vec = _mm512_sub_pd(coords_vec, q_vec[j]);
                                 dist_vec = _mm512_fmadd_pd(diff_vec, diff_vec, dist_vec);
                             }
+
                             _mm512_storeu_pd(dists.data() + i, dist_vec);
+                            
                         }
 
                         for (; i < numOfRecords; i++)
@@ -2336,20 +2469,15 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
 
                         for (i = 0; i < numOfRecords; i++)
                         {
-                            types::Point<Dim> p;
-                            for (uint32_t j = 0; j < Dim; j++)
-                            {
-                                p[j] = actualNode->records[j][i];
-                            }
-
-                            candidateResults.insert(heaps::maxHeapNode(dists[i], p));
+                            candidateResults.insert(heaps::maxHeapNode(dists[i], actualNode, i));
                         }
+
 
                         if (candidateResults.size() == candidateResults.capacity)
                         {
-                            bound = candidateResults.at(0).dist;
+                            bound = candidateResults.top().dist;
                         }
-                        
+
                         break;
                     }
                 }
@@ -2360,6 +2488,17 @@ inline types::Points<Dim> knnQuery_1way_nodes(types::Point<Dim> query, uint32_t 
 
     }
     
+
+    for (auto& entry: candidateResults.data)
+    {
+        types::Point<Dim> p;
+
+        for (uint32_t d = 0; d < Dim; d++)
+            p[d] = entry.leaf->records[d][entry.idx];
+        
+        results.emplace_back(p);
+    }
+
     return results;
 }
 
