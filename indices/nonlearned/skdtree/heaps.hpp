@@ -11,130 +11,106 @@
 #include <immintrin.h>
 #include <chrono>
 #include <cstddef>
+#include "tree_core.hpp"
 
 namespace heaps{
 template<size_t Dim>
 class maxHeapNode{
-    using Point = point_t<Dim>;
+    using LeafNode = Leaf_Node<Dim>;
 
     public :
+        uint32_t idx;
         double dist;
-        Point p;
+        LeafNode *leaf;
 
         maxHeapNode(){}
-        maxHeapNode(double dist, Point p)
+        maxHeapNode(double dist, LeafNode *leaf, uint32_t idx)
         {
+            this->idx = idx;
             this->dist = dist;
-            this->p = p;
+            this->leaf = leaf;
         }
-
-
 };
 
 template<size_t Dim>
-class maxHeap : public std::vector<maxHeapNode<Dim>>{
-    public:
-        uint32_t currCapacity, capacity;
+class maxHeap
+{
+public:
+    std::vector<maxHeapNode<Dim>> data;
+    uint32_t capacity;
 
-        maxHeap(uint32_t k)
+    explicit maxHeap(uint32_t k)
+        : capacity(k)
+    {
+        data.reserve(k);
+    }
+
+
+    inline const maxHeapNode<Dim>& top() const
+    {
+        return data[0];
+    }
+
+    inline size_t size() const
+    {
+        return data.size();
+    }
+
+    inline void siftUp(uint32_t i)
+    {
+        auto node = std::move(data[i]);
+
+        while (i > 0)
         {
-            this->currCapacity = 0;
-            this->capacity = k;
-            this->reserve(this->capacity);
-        }
+            uint32_t p = (i - 1) >> 1;
 
-        ~maxHeap(){}
-        // void compute();
-        void enheap(maxHeapNode<Dim> node)
-        {
-            int lastPos = this->size();
-            int p;
-            maxHeapNode<Dim> tmp;
-
-            this->push_back(node);
-            
-            while (lastPos > 0){
-                p = parent(lastPos);
-
-                if (node.dist < this->at(p).dist){
-                    break;
-                }
-                else{
-                    tmp = this->at(p);
-                    this->at(p) = node;
-                    this->at(lastPos) = tmp;
-                    lastPos = parent(lastPos);
-                }
-
-            }
-        }
-
-        uint32_t parent(uint32_t position)
-        {
-            if (position%2){
-                return position/2;
-            }
-            else{
-                return (position-1)/2;
-            }
-        }
-        void movedown()
-        {
-            int pos = 0;
-            int swap;
-            maxHeapNode<Dim> tmp;
-
-            while (pos*2 + 1 < this->size()){
-                if (pos*2 + 2 < this->size()){
-                    if (this->at(pos*2+1).dist < this->at(pos*2+2).dist ){
-                        swap = pos*2+2;
-                    }
-                    else{
-                        
-                        swap = pos*2+1;
-                    }
-                }
-                else{
-                    swap = pos*2+1;
-                }
-
-                if (this->at(pos).dist > this->at(swap).dist){
+            if (data[p].dist >= node.dist)
                 break;
-                }
-                else{
-                    tmp = this->at(swap);
-                    this->at(swap) = this->at(pos);
-                    this->at(pos) = tmp;
 
-                    pos = swap;
-                }
-            }
+            data[i] = std::move(data[p]);
+            i = p;
         }
-        void insert(maxHeapNode<Dim> node)
-        {
-            if (currCapacity < capacity){     
-                enheap(node);
-                currCapacity++;
-            }   
-            else{
-                if (node.dist > this->at(0).dist){
-                    return;
-                }
-                else{
-                    this->at(0) = node;
-                    movedown();
-                }
-            }            
-        }
-        maxHeapNode<Dim> deheap()
-        {
-            maxHeapNode<Dim> node;
-            node = this->at(this->currCapacity-1);
-            this->pop_back();
-            this->currCapacity--;
 
-            return node;
+        data[i] = std::move(node);
+    }
+
+    inline void siftDown(uint32_t i)
+    {
+        uint32_t n = data.size();
+        auto node = std::move(data[i]);
+
+        while (true)
+        {
+            uint32_t l = (i << 1) + 1;
+            if (l >= n) break;
+
+            uint32_t r = l + 1;
+
+            uint32_t best = (r < n && data[r].dist > data[l].dist) ? r : l;
+
+            if (data[best].dist <= node.dist)
+                break;
+
+            data[i] = std::move(data[best]);
+            i = best;
         }
+
+        data[i] = std::move(node);
+    }
+
+    inline void insert(const maxHeapNode<Dim> node)
+    {
+        if (data.size() < capacity)
+        {
+            data.push_back(node);
+            siftUp(data.size() - 1);
+        }
+        else if (node.dist < data[0].dist)
+        {
+            data[0] = node;
+            siftDown(0);
+        }
+    }
 };
 
 
