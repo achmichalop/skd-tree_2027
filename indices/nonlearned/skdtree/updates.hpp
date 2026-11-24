@@ -3897,9 +3897,11 @@ inline insert_func<Dim> insertPoint[] = {
  *    interfere with deletion correctness.
  */
 
+
 template <size_t Dim>
 inline void remove_3way_nodes(types::Point<Dim> point)
 {
+
     uint8_t dim = 0, type;
     uint32_t metadata, pos = 0, slotuse;
     uint64_t convertedCoordinates[Dim];
@@ -3957,7 +3959,6 @@ inline void remove_3way_nodes(types::Point<Dim> point)
     if (currLeaf->slotuse == 0)
         return;
     types::Point<Dim> leafMinCoords = currLeaf->boundingBox.min_corner(), leafMaxCoords = currLeaf->boundingBox.max_corner();
-
 
     for (int d = 0; d < Dim; d++)
     {
@@ -4029,6 +4030,7 @@ inline void remove_3way_nodes(types::Point<Dim> point)
             __m512d q_vec = _mm512_set1_pd(point[d]);
             validMask &=  _mm512_cmp_pd_mask(coords_vec, q_vec, _CMP_EQ_OQ);
 
+
             if (!validMask)
                 return;
         }
@@ -4083,7 +4085,6 @@ UPDATE_LEAF:
                     {
                         actualNode->slotuse--;
                         actualNode->separators[pos - 1] = USHRT_MAX;
-                        
                         return;
                     }
                     else
@@ -4095,8 +4096,7 @@ UPDATE_LEAF:
                         actualNode->slotuse--;
                         
                         actualNode->separators[actualNode->slotuse] = USHRT_MAX;
-                        actualNode->childsPtrs[actualNode->slotuse] = ptr;
-                        
+                        actualNode->childsPtrs[actualNode->slotuse] = ptr;                        
                         return;
                     }
 
@@ -4127,8 +4127,7 @@ UPDATE_LEAF:
                         actualNode->slotuse--;
                         
                         actualNode->separators[actualNode->slotuse] = UINT_MAX;
-                        actualNode->childsPtrs[actualNode->slotuse] = ptr;
-                        
+                        actualNode->childsPtrs[actualNode->slotuse] = ptr;                        
                         return;
                     }
 
@@ -4167,14 +4166,23 @@ UPDATE_LEAF:
                     break;
                 }
             }
-        }       
+        }
+
     }
 
     for (int d = 0; d < Dim; d++)
     {
-        auto [minIt, maxIt] = minmax_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
-        leafMinCoords[d] = *minIt;
-        leafMaxCoords[d] = *maxIt;
+        if (point[d] == leafMinCoords[d])
+        {
+            auto minIt = min_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
+            leafMinCoords[d] = *minIt;
+        }
+
+        if (point[d] == leafMaxCoords[d])
+        {
+            auto maxIt = max_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
+            leafMaxCoords[d] = *maxIt;
+        }
     }
 
     currLeaf->boundingBox = types::Box<Dim>(leafMinCoords, leafMaxCoords);
@@ -4186,6 +4194,7 @@ UPDATE_LEAF:
 template <size_t Dim>
 inline void remove_2way_nodes(types::Point<Dim> point)
 {
+
     uint8_t dim = 0, type;
     uint32_t metadata, pos = 0, slotuse;
     uint64_t convertedCoordinates[Dim];
@@ -4372,8 +4381,7 @@ UPDATE_LEAF:
                         actualNode->slotuse--;
                         
                         actualNode->separators[actualNode->slotuse] = UINT_MAX;
-                        actualNode->childsPtrs[actualNode->slotuse] = ptr;
-                        
+                        actualNode->childsPtrs[actualNode->slotuse] = ptr;                        
                         return;
                     }
 
@@ -4404,8 +4412,7 @@ UPDATE_LEAF:
                         actualNode->slotuse--;
                         
                         actualNode->separators[actualNode->slotuse] = ULONG_MAX;
-                        actualNode->childsPtrs[actualNode->slotuse] = ptr;
-                        
+                        actualNode->childsPtrs[actualNode->slotuse] = ptr;                        
                         return;
                     }
 
@@ -4417,9 +4424,17 @@ UPDATE_LEAF:
 
     for (int d = 0; d < Dim; d++)
     {
-        auto [minIt, maxIt] = minmax_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
-        leafMinCoords[d] = *minIt;
-        leafMaxCoords[d] = *maxIt;
+        if (point[d] == leafMinCoords[d])
+        {
+            auto minIt = min_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
+            leafMinCoords[d] = *minIt;
+        }
+
+        if (point[d] == leafMaxCoords[d])
+        {
+            auto maxIt = max_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
+            leafMaxCoords[d] = *maxIt;
+        }
     }
 
     currLeaf->boundingBox = types::Box<Dim>(leafMinCoords, leafMaxCoords);
@@ -4596,18 +4611,24 @@ UPDATE_LEAF:
                 
                 actualNode->separators[actualNode->slotuse] = ULONG_MAX;
                 actualNode->childsPtrs[actualNode->slotuse] = ptr;
-                
                 return;
             }
-
         }       
     }
 
     for (int d = 0; d < Dim; d++)
     {
-        auto [minIt, maxIt] = minmax_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
-        leafMinCoords[d] = *minIt;
-        leafMaxCoords[d] = *maxIt;
+        if (point[d] == leafMinCoords[d])
+        {
+            auto minIt = min_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
+            leafMinCoords[d] = *minIt;
+        }
+
+        if (point[d] == leafMaxCoords[d])
+        {
+            auto maxIt = max_element(currLeaf->records[d].begin(), currLeaf->records[d].begin() + currLeaf->slotuse);
+            leafMaxCoords[d] = *maxIt;
+        }
     }
 
     currLeaf->boundingBox = types::Box<Dim>(leafMinCoords, leafMaxCoords);
