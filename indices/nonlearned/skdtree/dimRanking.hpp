@@ -12,31 +12,30 @@
 #include "../../../utils/type.hpp"
 #include "../../../utils/common.hpp"
 
-
-/*
- * Ranker
- * ------
- * This module provides an auxiliary implementation for ranking data dimensions
- * based on a set of descriptive statistical features captured in the
- * DimFeatures structure.
- *
- * For each dimension, several distribution-related characteristics are computed
- * (e.g., variance, entropy, skewness, kurtosis, flatness, and normalized range).
- * These features are then normalized across dimensions and combined into a
- * single scalar score using a learned linear weighting.
- *
- * The weights are optimized by minimizing a custom loss function that encourages
- * score variance across dimensions while applying a smooth regularization term
- * to ensure numerical stability and prevent degenerate solutions.
- *
- * The final output is a descending ranking of dimensions based on their
- * computed scores derived from the learned feature weights.
- *
- * NOTE:
- * This ranking mechanism is self-contained and independent of other components
- * of the skd-tree index. It can be used as an analysis
- * step without affecting the index construction or query logic.
- */
+// /*
+//  * Ranker
+//  * ------
+//  * This module provides an auxiliary implementation for ranking data dimensions
+//  * based on a set of descriptive statistical features captured in the
+//  * DimFeatures structure.
+//  *
+//  * For each dimension, several distribution-related characteristics are computed
+//  * (e.g., variance, entropy, skewness, kurtosis, flatness, and normalized range).
+//  * These features are then normalized across dimensions and combined into a
+//  * single scalar score using a learned linear weighting.
+//  *
+//  * The weights are optimized by minimizing a custom loss function that encourages
+//  * score variance across dimensions while applying a smooth regularization term
+//  * to ensure numerical stability and prevent degenerate solutions.
+//  *
+//  * The final output is a descending ranking of dimensions based on their
+//  * computed scores derived from the learned feature weights.
+//  *
+//  * NOTE:
+//  * This ranking mechanism is self-contained and independent of other components
+//  * of the skd-tree index. It can be used as an analysis
+//  * step without affecting the index construction or query logic.
+//  */
 
 namespace ranker
 {
@@ -52,6 +51,8 @@ namespace ranker
     struct RankedDimension {
         uint32_t dimension;
         double score;
+        uint32_t distinct = 0;
+        bool gated = false;
     };
 
     static inline double smooth_abs(double x, double eps = 1e-6) {
@@ -164,18 +165,19 @@ namespace ranker
         double flatness;
     };
 
-    static HistogramStats computeHistogramStats(const std::vector<double>& v) {
+    static HistogramStats computeHistogramStats(const std::vector<double>& v,
+                                                  double min_v, double max_v) {
         if (v.empty()) return {0.0, 1.0};
 
         int bins = std::clamp(static_cast<int>(std::sqrt(v.size())), 4, 100);
         std::vector<double> counts(bins, 1e-6);
 
-        auto [min_v, max_v] = std::minmax_element(v.begin(), v.end());
-        double span = *max_v - *min_v;
+        double span = max_v - min_v;
         double bin_size = (span < 1e-12) ? 1.0 : (span / bins);
+        double inv_bin = (span < 1e-12) ? 0.0 : (1.0 / bin_size);
 
         for (double x : v) {
-            int idx = (span < 1e-12) ? 0 : std::min(bins - 1, int((x - *min_v) / bin_size));
+            int idx = (span < 1e-12) ? 0 : std::min(bins - 1, int((x - min_v) * inv_bin));
             counts[idx] += 1.0;
         }
 
@@ -202,7 +204,9 @@ namespace ranker
         using Point = point_t<dim>;
         using Points = std::vector<Point>;
     public:
-        DimRanker(Points& points) : points(points) {}
+
+        DimRanker(Points& points, uint32_t min_distinct = 32)
+            : points(points), min_distinct(min_distinct) {}
 
         std::vector<RankedDimension> rankDimensions() {
             computeFeatures();
@@ -217,6 +221,8 @@ namespace ranker
             std::sort(result.begin(), result.end(), [](const RankedDimension& a, const RankedDimension& b) {
                 return a.score > b.score;
             });
+
+            applyDistinctGate(result, false);
             return result;
         }
 
@@ -234,34 +240,9 @@ namespace ranker
                 return a.score > b.score;
             });
 
-            // computeCorrelationMatrixSampled();
+            applyDistinctGate(result, true);
+
             return result;
-        }
-
-        void printCorrelationMatrix()
-        {
-            const size_t d = correlationMatrix.n_rows;
-
-            std::cout << "Correlation matrix (" << d << "x" << d << "):\n\n";
-
-            // Header
-            std::cout << "      ";
-            for (size_t j = 0; j < d; ++j)
-                std::cout << "d" << j << "      ";
-            std::cout << "\n";
-
-            // Rows
-            for (size_t i = 0; i < d; ++i)
-            {
-                std::cout << "d" << i << "  ";
-                for (size_t j = 0; j < d; ++j)
-                {
-                    double v = correlationMatrix(i, j);
-                    if (std::abs(v) < 1e-12) v = 0.0; // remove tiny numerical noise
-                    std::cout << std::setw(7) << v << " ";
-                }
-                std::cout << "\n";
-            }
         }
 
     private:
@@ -273,8 +254,9 @@ namespace ranker
         arma::vec meansPerDim;
         std::vector<size_t> corrSampleIdx;
         arma::mat correlationMatrix;
-        
-        // Optimized full dataset feature computation
+        uint32_t min_distinct = 32;
+
+ 
         void computeFeatures() {
             const size_t d = dim;
             const size_t n = points.size();
@@ -290,18 +272,40 @@ namespace ranker
                 for (size_t i = 0; i < n; ++i)
                     vals.push_back(points[i][j]);
 
-                double m = mean(vals);
-                double var = variance(vals, m);
-                double stddev = safe_std(var);
-                double sk = skewness(vals, m, stddev);
-                double kurt = kurtosis(vals, m, stddev) - 3.0;
+                double sum = 0.0, min_v = vals[0], max_v = vals[0];
+                for (double x : vals) 
+                { 
+                    sum += x; 
+                    if (x < min_v) 
+                        min_v = x; 
+                    if (x > max_v) 
+                        max_v = x; 
+                }
 
-                HistogramStats h = computeHistogramStats(vals);
+                double m = sum / vals.size();
+                double m2 = 0.0, m3 = 0.0, m4 = 0.0;
+                for (double x : vals) 
+                { 
+                    double dd = x - m; 
+                    double d2 = dd * dd; 
+                    m2 += d2; 
+                    m3 += d2 * dd; 
+                    m4 += d2 * d2; 
+                }
+
+                double invn = 1.0 / vals.size();
+                m2 *= invn; m3 *= invn; m4 *= invn;
+                double var = m2;
+                double stddev = safe_std(var);
+                double sd3 = stddev * stddev * stddev;
+                double sk = (stddev < 1e-12) ? 0.0 : m3 / sd3;
+                double kurt = (stddev < 1e-12) ? 0.0 : (m4 / (sd3 * stddev)) - 3.0;
+
+                HistogramStats h = computeHistogramStats(vals, min_v, max_v);
                 double ent = h.entropy;
                 double flatness = h.flatness;
 
-                double range_norm = ((*std::max_element(vals.begin(), vals.end())) -
-                                     (*std::min_element(vals.begin(), vals.end()))) / (stddev + 1e-9);
+                double range_norm = (max_v - min_v) / (stddev + 1e-9);
                 if (!std::isfinite(range_norm) || std::abs(range_norm) > 1e6)
                     range_norm = (range_norm > 0) ? 1e6 : -1e6;
 
@@ -310,12 +314,11 @@ namespace ranker
             }
         }
 
-        // Optimized sampled feature computation
         void computeFeatures(double sample_ratio) {
-            const size_t d = dim;
-            const size_t total_n = points.size();
-            const size_t n = static_cast<size_t>(total_n * sample_ratio);
-            // std::cout << "ratio: " << sample_ratio << " -- size: " << total_n << " -- sample_size: " << n << std::endl;
+            size_t d = dim;
+            size_t total_n = points.size();
+            size_t n = static_cast<size_t>(total_n * sample_ratio);
+            n = (n < 5000000) ? n : 5000000; 
 
             features.clear();
             features.reserve(d);
@@ -343,18 +346,43 @@ namespace ranker
                 for (size_t i = 0; i < n; ++i)
                     vals.push_back(points[sampleIdx[i]][j]);
 
-                double m = mean(vals);
-                double var = variance(vals, m);
-                double stddev = safe_std(var);
-                double sk = skewness(vals, m, stddev);
-                double kurt = kurtosis(vals, m, stddev) - 3.0;
+                double sum = 0.0, min_v = vals[0], max_v = vals[0];
+                for (double x : vals) 
+                { 
+                    sum += x; 
+                    if (x < min_v) 
+                        min_v = x; 
+                    
+                    if (x > max_v) 
+                        max_v = x; 
+                    
+                }
 
-                HistogramStats h = computeHistogramStats(vals);
+                double m = sum / vals.size();
+                double m2 = 0.0, m3 = 0.0, m4 = 0.0;
+                
+                for (double x : vals) 
+                { 
+                    double dd = x - m; 
+                    double d2 = dd * dd; 
+                    m2 += d2; 
+                    m3 += d2 * dd; 
+                    m4 += d2 * d2; 
+                }
+                
+                double invn = 1.0 / vals.size();
+                m2 *= invn; m3 *= invn; m4 *= invn;
+                double var = m2;
+                double stddev = safe_std(var);
+                double sd3 = stddev * stddev * stddev;
+                double sk = (stddev < 1e-12) ? 0.0 : m3 / sd3;
+                double kurt = (stddev < 1e-12) ? 0.0 : (m4 / (sd3 * stddev)) - 3.0;
+
+                HistogramStats h = computeHistogramStats(vals, min_v, max_v);
                 double ent = h.entropy;
                 double flatness = h.flatness;
 
-                double range_norm = ((*std::max_element(vals.begin(), vals.end())) -
-                                     (*std::min_element(vals.begin(), vals.end()))) / (stddev + 1e-9);
+                double range_norm = (max_v - min_v) / (stddev + 1e-9);
                 if (!std::isfinite(range_norm) || std::abs(range_norm) > 1e6)
                     range_norm = (range_norm > 0) ? 1e6 : -1e6;
 
@@ -411,48 +439,28 @@ namespace ranker
                    w(3)*f.excess_kurtosis + w(4)*f.flatness + w(5)*f.range_norm;
         }
 
-        void computeCorrelationMatrixSampled()
-        {
-            const size_t d = dim;
-            const size_t n = corrSampleIdx.size();
-
-            correlationMatrix.set_size(d,d);
-
-            arma::vec meanVec(d, arma::fill::zeros);
-            arma::vec stdVec(d, arma::fill::zeros);
-
-            // Compute mean and std (sample std, n-1)
-            for (size_t j = 0; j < d; ++j)
-            {
-                double sum = 0.0;
-                for (size_t idx : corrSampleIdx) sum += points[idx][j];
-                meanVec(j) = sum / n;
-
-                double var = 0.0;
-                for (size_t idx : corrSampleIdx) var += (points[idx][j] - meanVec(j)) * (points[idx][j] - meanVec(j));
-                var /= (n - 1);
-                stdVec(j) = std::sqrt(var);
+        uint32_t countDistinctDim(size_t j, bool sampled) const {
+            std::unordered_set<double> seen;
+            if (sampled && !corrSampleIdx.empty()) {
+                seen.reserve(corrSampleIdx.size());
+                for (size_t idx : corrSampleIdx)
+                    seen.insert(static_cast<double>(points[idx][j]));
+            } else {
+                const size_t n = points.size();
+                seen.reserve(n < 1000000 ? n : 1000000);
+                for (size_t i = 0; i < n; ++i)
+                    seen.insert(static_cast<double>(points[i][j]));
             }
-
-            // Compute correlation
-            for (size_t i = 0; i < d; ++i)
-            {
-                for (size_t j = i; j < d; ++j)
-                {
-                    double cov = 0.0;
-                    for (size_t idx : corrSampleIdx)
-                        cov += (points[idx][i] - meanVec(i)) * (points[idx][j] - meanVec(j));
-
-                    cov /= (n - 1);
-                    double corr = cov / (stdVec(i) * stdVec(j));
-
-                    if (!std::isfinite(corr)) corr = 0.0;
-
-                    correlationMatrix(i,j) = corr;
-                    correlationMatrix(j,i) = corr;
-                }
-            }
+            return static_cast<uint32_t>(seen.size());
         }
 
+        void applyDistinctGate(std::vector<RankedDimension>& result, bool sampled) const {
+            for (auto& r : result) {
+                r.distinct = countDistinctDim(r.dimension, sampled);
+                r.gated = (r.distinct < min_distinct);
+            }
+            std::stable_partition(result.begin(), result.end(),
+                [](const RankedDimension& r) { return !r.gated; });
+        }
     };
 }
