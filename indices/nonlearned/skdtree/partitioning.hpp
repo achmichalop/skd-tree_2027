@@ -357,7 +357,7 @@ void buildIndex_3way_nodes(types::Points<Dim> &points)
         currLvlPtrs.resize(numNodesPerLevel * NODE_SIZE_16);
         nextLvlBounds.resize(numNodesPerLevel * NODE_SIZE_16);
         currentDim = rankedDims[examinedDims].dimension;
-        
+
         for (j = 0; j < numNodesPerLevel; j++)
         {
             startBound = currLvlBounds[j].first;
@@ -901,7 +901,6 @@ void buildIndex_3way_nodes(types::Points<Dim> &points)
         nextLvlBounds.clear();
         
         avgProducedSeparatorsPerLvl = round(avgProducedSeparatorsPerLvl / (double) numNodesPerLevel);
-
         meanPerLevel = sumPerLevel / nextLvlNodes;
         double variance = (sumSqPerLevel / nextLvlNodes) - (meanPerLevel * meanPerLevel);
         stddevPerLevel = sqrt(variance);
@@ -978,26 +977,28 @@ void buildIndex_3way_nodes(types::Points<Dim> &points)
         }
         
         types::Point<Dim> minCorner, maxCorner;
-        
-        for (uint32_t j = 0; j < Dim; j++)
-        {
-            auto [minIt, maxIt] = minmax_element(points.begin() + startBound, points.begin() + endBound, [j](auto &a, auto &b){return a[j] < b[j];});
-            minCorner[j] = (*minIt)[j];
-            maxCorner[j] = (*maxIt)[j];
+        minCorner.fill(std::numeric_limits<double>::max());
+        maxCorner.fill(-std::numeric_limits<double>::max());
 
-            newNode->records[j].resize(leafNodeSize);
+        for (size_t d = 0; d < Dim; d++)
+        {
+            newNode->records[d].resize(leafNodeSize);
+
+            for (i = startBound, k = 0; i < endBound; i++, k++)
+            {
+                auto& r = points[i];
+
+                if (r[d] < minCorner[d])
+                    minCorner[d] = r[d];
+                
+                if (r[d] > maxCorner[d])
+                    maxCorner[d] = r[d];
+
+                newNode->records[d][k] = r[d];
+            }
         }
 
         newNode->boundingBox = types::Box<Dim>(minCorner, maxCorner);
-
-        for (i = startBound, k = 0; i < endBound; i++, k++)
-        {
-            auto &r = points[i];
-            for (uint32_t j = 0; j < Dim; j++)
-            {
-                newNode->records[j][k] = r[j];
-            }
-        }
 
         *prevLvlPtrs[j] = (void *) newNode;
     }
@@ -1439,27 +1440,30 @@ void buildIndex_2way_nodes(types::Points<Dim> &points)
             leafNodeSize = numOfElements;
         }
         
-        types::Point<Dim> minCorner, maxCorner;
-        
-        for (uint32_t j = 0; j < Dim; j++)
-        {
-            auto [minIt, maxIt] = minmax_element(points.begin() + startBound, points.begin() + endBound, [j](auto &a, auto &b){return a[j] < b[j];});
-            minCorner[j] = (*minIt)[j];
-            maxCorner[j] = (*maxIt)[j];
 
-            newNode->records[j].resize(leafNodeSize);
+        types::Point<Dim> minCorner, maxCorner;
+        minCorner.fill(std::numeric_limits<double>::max());
+        maxCorner.fill(-std::numeric_limits<double>::max());
+
+        for (size_t d = 0; d < Dim; d++)
+        {
+            newNode->records[d].resize(leafNodeSize);
+
+            for (i = startBound, k = 0; i < endBound; i++, k++)
+            {
+                auto& r = points[i];
+
+                if (r[d] < minCorner[d])
+                    minCorner[d] = r[d];
+                
+                if (r[d] > maxCorner[d])
+                    maxCorner[d] = r[d];
+
+                newNode->records[d][k] = r[d];
+            }
         }
 
         newNode->boundingBox = types::Box<Dim>(minCorner, maxCorner);
-
-        for (i = startBound, k = 0; i < endBound; i++, k++)
-        {
-            auto &r = points[i];
-            for (uint32_t j = 0; j < Dim; j++)
-            {
-                newNode->records[j][k] = r[j];
-            }
-        }
 
         *prevLvlPtrs[j] = (void *) newNode;
     }
@@ -1501,7 +1505,6 @@ void buildIndex_1way_nodes(types::Points<Dim> &points)
         currLvlPtrs.resize(numNodesPerLevel * NODE_SIZE_64);
         nextLvlBounds.resize(numNodesPerLevel * NODE_SIZE_64);
         currentDim = rankedDims[examinedDims].dimension;
-        
         for (j = 0; j < numNodesPerLevel; j++)
         {
             startBound = currLvlBounds[j].first;
@@ -1727,28 +1730,31 @@ void buildIndex_1way_nodes(types::Points<Dim> &points)
             outlierLeaves++;
             leafNodeSize = numOfElements;
         }
-        
-        types::Point<Dim> minCorner, maxCorner;
-        
-        for (uint32_t j = 0; j < Dim; j++)
-        {
-            auto [minIt, maxIt] = minmax_element(points.begin() + startBound, points.begin() + endBound, [j](auto &a, auto &b){return a[j] < b[j];});
-            minCorner[j] = (*minIt)[j];
-            maxCorner[j] = (*maxIt)[j];
+                
 
-            newNode->records[j].resize(leafNodeSize);
+        types::Point<Dim> minCorner, maxCorner;
+        minCorner.fill(std::numeric_limits<double>::max());
+        maxCorner.fill(-std::numeric_limits<double>::max());
+
+        for (size_t d = 0; d < Dim; d++)
+        {
+            newNode->records[d].resize(leafNodeSize);
+
+            for (i = startBound, k = 0; i < endBound; i++, k++)
+            {
+                auto& r = points[i];
+
+                if (r[d] < minCorner[d])
+                    minCorner[d] = r[d];
+                
+                if (r[d] > maxCorner[d])
+                    maxCorner[d] = r[d];
+
+                newNode->records[d][k] = r[d];
+            }
         }
 
         newNode->boundingBox = types::Box<Dim>(minCorner, maxCorner);
-
-        for (i = startBound, k = 0; i < endBound; i++, k++)
-        {
-            auto &r = points[i];
-            for (uint32_t j = 0; j < Dim; j++)
-            {
-                newNode->records[j][k] = r[j];
-            }
-        }
 
         *prevLvlPtrs[j] = (void *) newNode;
     }
